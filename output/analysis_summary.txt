@@ -1,0 +1,9 @@
+Houston Astros Historical Analysis Summary
+=======================================
+
+Total Players: 874
+Years Covered: 1965 - 2020
+Average WAR: 0.42
+All-Stars: 0
+Hall of Famers: 0
+Average Career Length: 6.37

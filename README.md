@@ -15,7 +15,7 @@ An interactive dashboard built with Dash to analyze Houston Astros roster data a
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/diamond.git
+git clone https://github.com/MikeWayne92/diamond.git
 cd diamond
 ```
 
