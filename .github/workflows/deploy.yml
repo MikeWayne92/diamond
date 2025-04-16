@@ -37,18 +37,56 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-full.txt
-          pip install gunicorn
+          pip install gunicorn requests
 
       - name: Generate static files
         run: |
-          mkdir -p _site/assets
+          mkdir -p _site
           python - << 'EOF'
+          import os
           import dash
           from dash import html
+          import flask
+          import json
+          from dashboard import app, df
           import plotly.express as px
-          from dashboard import app
           
-          # Configure the app for static file generation
+          # Create the _site directory if it doesn't exist
+          os.makedirs('_site', exist_ok=True)
+          os.makedirs('_site/assets', exist_ok=True)
+          
+          # First, we'll generate all the initial figures by triggering the callbacks
+          from dashboard import (
+              update_war_graph,
+              update_career_graph,
+              update_position_graph,
+              update_demographics_graph
+          )
+          
+          # Generate initial figures with default values
+          initial_figures = {
+              'war-by-age': update_war_graph('age'),
+              'career-analysis': update_career_graph('years'),
+              'position-analysis': update_position_graph('distribution'),
+              'demographics-analysis': update_demographics_graph('age')
+          }
+          
+          # Save the figures as JSON
+          os.makedirs('_site/_dash-layout', exist_ok=True)
+          for fig_id, fig in initial_figures.items():
+              with open(f'_site/_dash-layout/{fig_id}.json', 'w') as f:
+                  json.dump(fig, f)
+          
+          # Copy all static assets
+          if os.path.exists('assets'):
+              import shutil
+              for item in os.listdir('assets'):
+                  s = os.path.join('assets', item)
+                  d = os.path.join('_site/assets', item)
+                  if os.path.isfile(s):
+                      shutil.copy2(s, d)
+          
+          # Generate the index.html
           app.index_string = '''
           <!DOCTYPE html>
           <html>
@@ -58,6 +96,10 @@ jobs:
                   {%favicon%}
                   {%css%}
                   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <style>
+                      body { margin: 0; }
+                      .dash-debug-menu { display: none; }
+                  </style>
               </head>
               <body>
                   {%app_entry%}
@@ -70,16 +112,30 @@ jobs:
           </html>
           '''
           
-          # Save the HTML
-          with open('_site/index.html', 'w', encoding='utf-8') as f:
-              f.write(app.index.get_string())
+          # Get the initial HTML
+          client = app.server.test_client()
+          response = client.get('/')
           
-          # Save any static assets
-          for resource in app.get_asset_url('/'):
-              resource_path = resource.replace('/', '')
-              if resource_path:
-                  with open(f'_site/assets/{resource_path}', 'wb') as f:
-                      f.write(app.get_asset_file(resource_path))
+          with open('_site/index.html', 'wb') as f:
+              f.write(response.data)
+          
+          # Create a minimal dash-deps.js with the initial state
+          init_state = {
+              'war-metric': 'age',
+              'career-metric': 'years',
+              'position-metric': 'distribution',
+              'demographics-metric': 'age'
+          }
+          
+          dash_deps = f'''
+          window.dash_clientside = {{
+              initial_state: {json.dumps(init_state)}
+          }};
+          '''
+          
+          with open('_site/dash-deps.js', 'w') as f:
+              f.write(dash_deps)
+          
           EOF
 
       - name: Setup Pages
