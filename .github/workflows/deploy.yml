@@ -11,6 +11,10 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,16 +36,19 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-core.txt
           pip install -r requirements-full.txt
-          pip install gunicorn matplotlib seaborn pandas numpy plotly dash
+          pip install gunicorn
 
-      - name: Create static files
+      - name: Generate static files
         run: |
-          mkdir -p assets
-          python -c "
+          mkdir -p _site/assets
+          python - << 'EOF'
+          import dash
+          from dash import html
+          import plotly.express as px
           from dashboard import app
           
+          # Configure the app for static file generation
           app.index_string = '''
           <!DOCTYPE html>
           <html>
@@ -50,6 +57,7 @@ jobs:
                   <title>Houston Astros Analytics Dashboard</title>
                   {%favicon%}
                   {%css%}
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
               </head>
               <body>
                   {%app_entry%}
@@ -62,14 +70,17 @@ jobs:
           </html>
           '''
           
-          if __name__ == '__main__':
-              app.run_server(debug=False)
-          " > serve.py
+          # Save the HTML
+          with open('_site/index.html', 'w', encoding='utf-8') as f:
+              f.write(app.index.get_string())
           
-          python serve.py &
-          sleep 10  # Give more time for the server to start
-          curl --retry 3 --retry-delay 2 http://127.0.0.1:8050/ > index.html
-          pkill -f "python serve.py"
+          # Save any static assets
+          for resource in app.get_asset_url('/'):
+              resource_path = resource.replace('/', '')
+              if resource_path:
+                  with open(f'_site/assets/{resource_path}', 'wb') as f:
+                      f.write(app.get_asset_file(resource_path))
+          EOF
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -77,7 +88,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
 
   deploy:
     needs: build
