@@ -44,98 +44,187 @@ jobs:
           mkdir -p _site
           python - << 'EOF'
           import os
+          import sys
           import dash
-          from dash import html
           import flask
           import json
-          from dashboard import app, df
-          import plotly.express as px
+          import shutil
           
           # Create the _site directory if it doesn't exist
           os.makedirs('_site', exist_ok=True)
           os.makedirs('_site/assets', exist_ok=True)
           
-          # First, we'll generate all the initial figures by triggering the callbacks
-          from dashboard import (
-              update_war_graph,
-              update_career_graph,
-              update_position_graph,
-              update_demographics_graph
-          )
+          # Let's create a simple HTML file that includes the Dash app
+          simple_html = """<!DOCTYPE html>
+          <html>
+          <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>Houston Astros Analytics Dashboard</title>
+              <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+              <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+              <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+              <style>
+                  body {
+                      background-color: #1A1A1A;
+                      color: white;
+                      font-family: Arial, sans-serif;
+                      margin: 0;
+                      padding: 0;
+                  }
+                  .container {
+                      padding: 20px;
+                      max-width: 1200px;
+                      margin: 0 auto;
+                  }
+                  .header {
+                      text-align: center;
+                      padding: 20px;
+                  }
+                  .card {
+                      background-color: #2A2A2A;
+                      border-radius: 10px;
+                      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+                      margin: 15px;
+                      padding: 20px;
+                  }
+                  .card h3 {
+                      color: white;
+                      font-size: 1.8em;
+                      margin-bottom: 15px;
+                  }
+                  .row {
+                      display: flex;
+                      flex-wrap: wrap;
+                  }
+                  .chart-container {
+                      width: 100%;
+                      height: 400px;
+                  }
+                  .subtitle {
+                      color: #EB6E1F;
+                      text-align: center;
+                      font-size: 1.2em;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <div class="header">
+                      <h1 style="color: white; font-weight: bold; font-size: 2.5em;">Houston Astros Analytics Dashboard</h1>
+                      <p class="subtitle">Interactive visualization of Houston Astros roster data and performance metrics</p>
+                  </div>
+                  
+                  <div class="row">
+                      <div class="col-md-6">
+                          <div class="card">
+                              <h3>WAR Analysis</h3>
+                              <div id="war-by-age" class="chart-container"></div>
+                          </div>
+                      </div>
+                      <div class="col-md-6">
+                          <div class="card">
+                              <h3>Career Longevity</h3>
+                              <div id="career-analysis" class="chart-container"></div>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <div class="row">
+                      <div class="col-md-6">
+                          <div class="card">
+                              <h3>Position Analysis</h3>
+                              <div id="position-analysis" class="chart-container"></div>
+                          </div>
+                      </div>
+                      <div class="col-md-6">
+                          <div class="card">
+                              <h3>Player Demographics</h3>
+                              <div id="demographics-analysis" class="chart-container"></div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+              
+              <script>
+                  // Load the visualizations
+                  document.addEventListener('DOMContentLoaded', function() {
+                      // The plots will be loaded from separate JSON files
+                      const plots = [
+                          { id: 'war-by-age', url: './plots/war-by-age.json' },
+                          { id: 'career-analysis', url: './plots/career-analysis.json' },
+                          { id: 'position-analysis', url: './plots/position-analysis.json' },
+                          { id: 'demographics-analysis', url: './plots/demographics-analysis.json' }
+                      ];
+                      
+                      plots.forEach(plot => {
+                          fetch(plot.url)
+                              .then(response => response.json())
+                              .then(figure => {
+                                  Plotly.newPlot(plot.id, figure.data, figure.layout);
+                              })
+                              .catch(error => {
+                                  console.error('Error loading plot:', error);
+                                  document.getElementById(plot.id).innerHTML = 
+                                      '<p style="color:red">Error loading visualization</p>';
+                              });
+                      });
+                  });
+              </script>
+          </body>
+          </html>"""
           
-          # Generate initial figures with default values
-          initial_figures = {
-              'war-by-age': update_war_graph('age'),
-              'career-analysis': update_career_graph('years'),
-              'position-analysis': update_position_graph('distribution'),
-              'demographics-analysis': update_demographics_graph('age')
-          }
+          # Create plots directory
+          os.makedirs('_site/plots', exist_ok=True)
           
-          # Save the figures as JSON
-          os.makedirs('_site/_dash-layout', exist_ok=True)
-          for fig_id, fig in initial_figures.items():
-              with open(f'_site/_dash-layout/{fig_id}.json', 'w') as f:
-                  json.dump(fig, f)
+          # Write the simple HTML file
+          with open('_site/index.html', 'w', encoding='utf-8') as f:
+              f.write(simple_html)
           
-          # Copy all static assets
+          print("Created index.html")
+          
+          # Now load the dashboard to generate figures
+          try:
+              # First try importing without data loading
+              from dashboard import app, update_war_graph, update_career_graph, update_position_graph, update_demographics_graph
+              
+              # Generate and save each plot using plotly's to_json method
+              plots = {
+                  'war-by-age': update_war_graph('age'),
+                  'career-analysis': update_career_graph('years'),
+                  'position-analysis': update_position_graph('distribution'),
+                  'demographics-analysis': update_demographics_graph('age')
+              }
+              
+              for plot_id, fig in plots.items():
+                  # Use Plotly's to_json method which properly serializes figures
+                  plot_json = fig.to_json()
+                  with open(f'_site/plots/{plot_id}.json', 'w', encoding='utf-8') as f:
+                      f.write(plot_json)
+                  print(f"Created {plot_id}.json")
+          
+          except Exception as e:
+              print(f"Error generating plots: {e}", file=sys.stderr)
+              # If we can't generate the plots, create placeholders
+              for plot_id in ['war-by-age', 'career-analysis', 'position-analysis', 'demographics-analysis']:
+                  empty_plot = {
+                      "data": [{"type": "scatter", "x": [], "y": []}],
+                      "layout": {"title": {"text": f"Error: Could not load {plot_id}"}}
+                  }
+                  with open(f'_site/plots/{plot_id}.json', 'w', encoding='utf-8') as f:
+                      json.dump(empty_plot, f)
+                  print(f"Created empty placeholder for {plot_id}.json")
+          
+          # Copy asset files if they exist
           if os.path.exists('assets'):
-              import shutil
               for item in os.listdir('assets'):
                   s = os.path.join('assets', item)
                   d = os.path.join('_site/assets', item)
                   if os.path.isfile(s):
                       shutil.copy2(s, d)
+                      print(f"Copied asset {item}")
           
-          # Generate the index.html
-          app.index_string = '''
-          <!DOCTYPE html>
-          <html>
-              <head>
-                  {%metas%}
-                  <title>Houston Astros Analytics Dashboard</title>
-                  {%favicon%}
-                  {%css%}
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                  <style>
-                      body { margin: 0; }
-                      .dash-debug-menu { display: none; }
-                  </style>
-              </head>
-              <body>
-                  {%app_entry%}
-                  <footer>
-                      {%config%}
-                      {%scripts%}
-                      {%renderer%}
-                  </footer>
-              </body>
-          </html>
-          '''
-          
-          # Get the initial HTML
-          client = app.server.test_client()
-          response = client.get('/')
-          
-          with open('_site/index.html', 'wb') as f:
-              f.write(response.data)
-          
-          # Create a minimal dash-deps.js with the initial state
-          init_state = {
-              'war-metric': 'age',
-              'career-metric': 'years',
-              'position-metric': 'distribution',
-              'demographics-metric': 'age'
-          }
-          
-          dash_deps = f'''
-          window.dash_clientside = {{
-              initial_state: {json.dumps(init_state)}
-          }};
-          '''
-          
-          with open('_site/dash-deps.js', 'w') as f:
-              f.write(dash_deps)
-          
+          print("Static site generation completed successfully")
           EOF
 
       - name: Setup Pages
