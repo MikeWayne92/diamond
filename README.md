@@ -61,6 +61,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Data source: [Add your data source here]
+- Data source: [Kaggle](https://www.kaggle.com/datasets/dasanson/boston-red-sox-roster-data-1965-2020)
 - Built with [Plotly Dash](https://dash.plotly.com/)
 - Color scheme based on official Houston Astros colors# diamond
